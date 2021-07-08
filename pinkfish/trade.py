@@ -13,6 +13,7 @@ class Direction:
     """
     LONG, SHORT = ['LONG', 'SHRT']
 
+
 class Margin:
     """
     The type of margin.  CASH, STANDARD, or PATTERN_DAY_TRADER.
@@ -54,7 +55,7 @@ class TradeLog:
     in Portfolio class.
     """
 
-    def __init__(self, symbol, reset=True):
+    def __init__(self, symbol, reset=True, fractional=True):
         """
         Initialize instance variables.
 
@@ -88,8 +89,10 @@ class TradeLog:
         """
         self.symbol = symbol
         self.shares = 0
+
         self.direction = None
         self.ave_entry_price = 0
+        self.fractional = fractional
         self.cumul_total = 0
         self._l = []
         self._raw = []
@@ -120,7 +123,7 @@ class TradeLog:
         elif self.direction == Direction.SHORT:
             value += (2*self.ave_entry_price-price)*self.shares
         return value
-        
+
     def total_value(self, price):
         """
         Return the total value which is the total share value plus cash.
@@ -155,7 +158,7 @@ class TradeLog:
         Return the leverage factor of the position.
         """
         return self.total_value(price) / self.equity(price)
-        
+
     def total_funds(self, price):
         """
         Return the total account funds for trading.
@@ -183,7 +186,7 @@ class TradeLog:
         Calculate buying power.
         """
         buying_power = (TradeLog.cash * TradeLog.margin
-                      + self.share_value(price) * (TradeLog.margin -1))
+                        + self.share_value(price) * (TradeLog.margin - 1))
         return buying_power
 
     def calc_shares(self, price, cash=None):
@@ -206,7 +209,8 @@ class TradeLog:
         """
 
         # Margin should be equal to or greater than 1.
-        if TradeLog.margin < 1: TradeLog.margin = 1
+        if TradeLog.margin < 1:
+            TradeLog.margin = 1
 
         # Calculate buying power.  TradeLog.buying_power may have
         # already been calculated in portfolio.
@@ -220,10 +224,13 @@ class TradeLog:
             cash = buying_power
 
         # Cash can't be negative.
-        if cash < 0: cash = 0
+        if cash < 0:
+            cash = 0
 
         # Calculate shares.
-        shares = int(cash / price)
+        shares = cash / price
+        if not self.fractional:
+            shares = int(shares)
         return shares
 
     def _enter_trade(self, entry_date, entry_price, shares=None, direction=Direction.LONG):
@@ -239,13 +246,14 @@ class TradeLog:
             return 0
 
         # Record in raw trade log.
-        t = (entry_date, TradeLog.seq_num, entry_price, shares, 'entry', direction, self.symbol)
+        t = (entry_date, TradeLog.seq_num, entry_price,
+             shares, 'entry', direction, self.symbol)
         self._raw.append(t)
         TradeLog.seq_num += 1
 
         # Add record to open_trades.
-        d = {'entry_date':entry_date, 'entry_price':entry_price, 'qty':shares,
-             'direction':direction, 'symbol':self.symbol}
+        d = {'entry_date': entry_date, 'entry_price': entry_price, 'qty': shares,
+             'direction': direction, 'symbol': self.symbol}
         self._open_trades.append(d)
 
         # Update direction.
@@ -259,7 +267,8 @@ class TradeLog:
 
         # Update average entry price and shares.
         self.ave_entry_price = \
-            (self.ave_entry_price*self.shares + entry_price*shares) / (self.shares + shares)
+            (self.ave_entry_price*self.shares +
+             entry_price*shares) / (self.shares + shares)
         self.shares += shares
 
         # Update cash.
@@ -334,7 +343,8 @@ class TradeLog:
         """
         Qty of an open trade by index.
         """
-        if index >= self.num_open_trades: return 0
+        if index >= self.num_open_trades:
+            return 0
         return self._open_trades[index]['qty']
 
     def _exit_trade(self, exit_date, exit_price, shares=None, direction=Direction.LONG):
@@ -360,7 +370,8 @@ class TradeLog:
         shares_orig = shares
 
         # Record in raw trade log.
-        t = (exit_date, TradeLog.seq_num, exit_price, shares, 'exit', direction, self.symbol)
+        t = (exit_date, TradeLog.seq_num, exit_price,
+             shares, 'exit', direction, self.symbol)
         self._raw.append(t)
         TradeLog.seq_num += 1
 
@@ -388,7 +399,7 @@ class TradeLog:
             # Update shares and cash.
             self.shares -= exit_shares
             TradeLog.cash += self.ave_entry_price*exit_shares + pl_cash
-            #TODO: This code used with futures at some point.
+            # TODO: This code used with futures at some point.
             #      I don't know if it's still needed or not.
             '''
             if direction == Direction.LONG:
@@ -401,7 +412,7 @@ class TradeLog:
 
             # Update open_trades list.
             if shares == qty:
-                del self._open_trades[0];
+                del self._open_trades[0]
                 break
             elif shares < qty:
                 self._open_trades[0]['qty'] -= shares
@@ -472,7 +483,7 @@ class TradeLog:
 
     ####################################################################
     # GET PRICES (get_price, get_prices)
-    
+
     def get_price(self, row, field='close'):
         """
         Return price given row and field.
@@ -659,11 +670,10 @@ class TradeLog:
                                         .dropna().reset_index(drop=True)
         return tlog
 
-
     def get_log(self, merge_trades=False):
         """
         Return the trade log.
-        
+
         The trade log consists of the following columns:
         'entry_date', 'entry_price', 'exit_date', 'exit_price',
         'pl_points', 'pl_cash', 'qty', 'cumul_total',
@@ -693,7 +703,7 @@ class TradeLog:
     def get_log_raw(self):
         """
         Return the raw trade log.
-        
+
         The trade log consists of the following columns:
         'date', 'seq_num', 'price', 'shares', 'entry_exit',
         'direction', 'symbol'
@@ -703,21 +713,24 @@ class TradeLog:
         rlog : pd.DataFrame
             The raw trade log.
         """
-        columns = ['date', 'seq_num', 'price', 'shares', 'entry_exit', 'direction', 'symbol']
+        columns = ['date', 'seq_num', 'price', 'shares',
+                   'entry_exit', 'direction', 'symbol']
         rlog = pd.DataFrame(self._raw, columns=columns)
         return rlog
 
 ########################################################################
 # DAILY BALANCE
 
+
 class TradeState:
     """
     The trade state of OPEN, HOLD, or CLOSE.
-    
+
     In the Daily Balance log, trade state is given by these
     characters: OPEN='O', HOLD='-', and CLOSE='X'
     """
     OPEN, HOLD, CLOSE = ['O', '-', 'X']
+
 
 class DailyBal:
     """
@@ -735,7 +748,7 @@ class DailyBal:
         """
         self._l = []
 
-    def append(self, date, high, low, close):
+    def append(self, date, high, low, close, tlog):
         """
         Append a new entry to the daily balance log.
 
@@ -749,6 +762,7 @@ class DailyBal:
             The balance low value of the day.
         close : float
             The balance close value of the day.
+        tlog: TradeLog
 
         Returns
         -------
@@ -758,13 +772,13 @@ class DailyBal:
         # calculate daily balance values:
         # date, high, low, close, shares, cash, leverage
         cash = TradeLog.cash
-        tlog = list(TradeLog.instance.values())[0]
-        shares   = tlog.shares
-        high_    = tlog.equity(high)
-        low_     = tlog.equity(low)
-        close_   = tlog.equity(close)
+        # tlog = list(TradeLog.instance.values())[0]
+        shares = tlog.shares
+        high_ = tlog.equity(high)
+        low_ = tlog.equity(low)
+        close_ = tlog.equity(close)
         leverage = tlog.leverage(close)
-        #if (close_ < 0):
+        # if (close_ < 0):
         #    print('{} WARNING: Margin Call!!!'
         #          .format(date.strftime('%Y-%m-%d')))
 
@@ -791,13 +805,14 @@ class DailyBal:
         dbal : pd.DataFrame
             The daily balance log.
         """
-        columns = ['date', 'high', 'low', 'close', 'shares', 'cash', 'leverage']
+        columns = ['date', 'high', 'low',
+                   'close', 'shares', 'cash', 'leverage']
         dbal = pd.DataFrame(self._l, columns=columns)
 
         def trade_state(row):
             """
             Apply function for adding the `state` column to dbal.
-            
+
             Convert pandas.timestamp to numpy.datetime64.
             See if there was a entry or exit in tlog on date.
             """
